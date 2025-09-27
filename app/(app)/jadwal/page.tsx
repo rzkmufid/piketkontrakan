@@ -11,6 +11,7 @@ import {
   formatTanggalIndo,
 } from "@/components/session-context";
 import useSWR from "swr";
+import { toast } from "sonner";
 
 type Task = { id: number; name: string; description?: string };
 type Completion = {
@@ -108,40 +109,46 @@ export default function JadwalPage() {
   const allDone =
     taskViews.length > 0 && taskViews.every((t) => !!t.completedByName);
 
-  // Ganti fungsi toggleTask Anda dengan yang ini di dalam JadwalPage
-
   const toggleTask = async (taskId: number, checked: boolean) => {
     if (!session) return;
 
-    // 1. Siapkan data baru secara "optimis"
-    const optimisticData = (completions || []).map((c) => ({ ...c })); // Salin data saat ini
+    const currentCompletion = (completions || []).find(
+      (c) => c.task_id === taskId
+    );
 
-    const existingCompletion = optimisticData.find((c) => c.task_id === taskId);
+    if (
+      !checked &&
+      currentCompletion &&
+      currentCompletion.user_id !== session.id
+    ) {
+      toast.error("Aksi Ditolak", {
+        description:
+          "Anda tidak bisa menghapus centang tugas yang diselesaikan oleh orang lain.",
+      });
+      return;
+    }
+
+    const optimisticData = (completions || []).map((c) => ({ ...c }));
 
     if (checked) {
-      // Jika mencentang, tambahkan data baru ke array
-      if (!existingCompletion) {
+      if (!currentCompletion) {
         optimisticData.push({
-          id: -1, // ID sementara, tidak penting
+          id: -1,
           task_id: taskId,
           date: dateKey,
           user_id: session.id,
-          username: session.name, // Gunakan nama dari sesi
+          username: session.name,
         });
       }
     } else {
-      // Jika menghapus centang, filter data dari array
       const index = optimisticData.findIndex((c) => c.task_id === taskId);
       if (index > -1) {
         optimisticData.splice(index, 1);
       }
     }
 
-    // 2. Perbarui UI secara instan dengan data optimis
-    //    'revalidate: false' mencegah SWR mengambil data ulang (yang menyebabkan skeleton)
     await mutate(optimisticData, { revalidate: false });
 
-    // 3. Kirim perubahan ke server di latar belakang
     try {
       const res = await fetch("/api/completions", {
         method: "POST",
@@ -153,28 +160,20 @@ export default function JadwalPage() {
           userId: session.id,
         }),
       });
+      if (!res.ok) throw new Error("Gagal menyimpan ke server");
 
-      if (!res.ok) {
-        // Jika server gagal, lempar error agar bisa ditangkap
-        throw new Error("Failed to update server");
-      }
+      // --- PERUBAHAN DI SINI ---
+      // Hapus baris mutate() di bawah ini.
+      // mutate(); // <--- HAPUS ATAU KOMENTARI BARIS INI
+      // ------------------------
     } catch (error) {
-      // 4. Jika terjadi error, kembalikan UI ke kondisi semula
-      console.error("Failed to toggle task:", error);
-      // Kembalikan data asli sebelum pembaruan optimis
+      console.error("Gagal mengubah tugas:", error);
+      toast.error("Gagal Menyimpan", {
+        description: "Perubahan Anda tidak berhasil disimpan.",
+      });
       await mutate(completions, { revalidate: false });
     }
   };
-
-  if (!bolehPiket && session?.role !== "superadmin") {
-    return (
-      <main className="mx-auto grid min-h-[60svh] w-full max-w-3xl place-items-center p-4">
-        <p className="text-center text-base">
-          Hari ini bukan jadwal piket untuk grup Anda ({group}). Santai dulu!
-        </p>
-      </main>
-    );
-  }
 
   if (pageIsLoading) {
     return <JadwalPageSkeleton />;
