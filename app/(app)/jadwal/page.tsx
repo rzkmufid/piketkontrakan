@@ -1,7 +1,9 @@
 "use client";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TriangleAlert } from "lucide-react";
 import {
   useSession,
@@ -10,12 +12,7 @@ import {
 } from "@/components/session-context";
 import useSWR from "swr";
 
-type Task = {
-  id: number;
-  name: string;
-  description?: string;
-};
-
+type Task = { id: number; name: string; description?: string };
 type Completion = {
   id: number;
   task_id: number;
@@ -23,43 +20,84 @@ type Completion = {
   user_id: number;
   username: string;
 };
+type TaskView = { id: number; name: string; completedByName?: string };
 
-type TaskView = {
-  id: number;
-  name: string;
-  completedByName?: string;
-};
+const JadwalPageSkeleton = () => (
+  <main className="mx-auto w-full max-w-3xl space-y-6">
+    <header>
+      <Skeleton className="h-8 w-3/4" />
+    </header>
+    <Card>
+      <CardHeader>
+        <Skeleton className="h-7 w-48" />
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <ul className="grid gap-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <li
+              key={i}
+              className="flex items-start gap-3 rounded-md border p-3"
+            >
+              <Skeleton className="mt-1 h-5 w-5 rounded" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-5 w-3/5" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  </main>
+);
 
 export default function JadwalPage() {
   const { session } = useSession();
-  const name = session?.name ?? "Pengguna";
   const group = session?.group ?? "Grup 1";
-
   const tanggal = formatTanggalIndo(new Date());
   const bolehPiket = isPicketDay(group, new Date());
+  const dateKey = new Date().toISOString().split("T")[0];
 
-  const dateKey = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
+  const {
+    data: tasks,
+    isLoading: tasksLoading,
+    isValidating: tasksValidating,
+  } = useSWR<Task[]>(
+    "/api/tasks",
+    async (url) => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Failed to fetch tasks");
+      const data = await res.json();
+      return data.tasks; // Ekstrak array 'tasks'
+    },
+    { revalidateOnFocus: false }
+  );
 
-  const { data: tasks = [] } = useSWR<Task[]>("/api/tasks", async (url) => {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("Failed to fetch tasks");
-    const data = await res.json();
-    return data.tasks;
-  });
-
-  const { data: completions = [], mutate } = useSWR<Completion[]>(
+  // === PERBAIKAN DI SINI ===
+  const {
+    data: completions,
+    mutate,
+    isLoading: completionsLoading,
+    isValidating: completionsValidating,
+  } = useSWR<Completion[]>(
     ["/api/completions", dateKey],
     async ([url, date]) => {
       const res = await fetch(`${url}?date=${date}`);
       if (!res.ok) throw new Error("Failed to fetch completions");
       const data = await res.json();
-      return data.completions;
+      return data.completions; // Ekstrak array 'completions'
     }
   );
+  // ==========================
 
-  // Merge tasks with completions
-  const taskViews: TaskView[] = tasks.map((task) => {
-    const completion = completions.find((c) => c.task_id === task.id);
+  const pageIsLoading =
+    tasksLoading ||
+    completionsLoading ||
+    tasksValidating ||
+    completionsValidating;
+
+  const taskViews: TaskView[] = (tasks || []).map((task) => {
+    const completion = (completions || []).find((c) => c.task_id === task.id);
     return {
       id: task.id,
       name: task.name,
@@ -70,9 +108,40 @@ export default function JadwalPage() {
   const allDone =
     taskViews.length > 0 && taskViews.every((t) => !!t.completedByName);
 
+  // Ganti fungsi toggleTask Anda dengan yang ini di dalam JadwalPage
+
   const toggleTask = async (taskId: number, checked: boolean) => {
     if (!session) return;
 
+    // 1. Siapkan data baru secara "optimis"
+    const optimisticData = (completions || []).map((c) => ({ ...c })); // Salin data saat ini
+
+    const existingCompletion = optimisticData.find((c) => c.task_id === taskId);
+
+    if (checked) {
+      // Jika mencentang, tambahkan data baru ke array
+      if (!existingCompletion) {
+        optimisticData.push({
+          id: -1, // ID sementara, tidak penting
+          task_id: taskId,
+          date: dateKey,
+          user_id: session.id,
+          username: session.name, // Gunakan nama dari sesi
+        });
+      }
+    } else {
+      // Jika menghapus centang, filter data dari array
+      const index = optimisticData.findIndex((c) => c.task_id === taskId);
+      if (index > -1) {
+        optimisticData.splice(index, 1);
+      }
+    }
+
+    // 2. Perbarui UI secara instan dengan data optimis
+    //    'revalidate: false' mencegah SWR mengambil data ulang (yang menyebabkan skeleton)
+    await mutate(optimisticData, { revalidate: false });
+
+    // 3. Kirim perubahan ke server di latar belakang
     try {
       const res = await fetch("/api/completions", {
         method: "POST",
@@ -85,16 +154,18 @@ export default function JadwalPage() {
         }),
       });
 
-      if (res.ok) {
-        await mutate();
+      if (!res.ok) {
+        // Jika server gagal, lempar error agar bisa ditangkap
+        throw new Error("Failed to update server");
       }
     } catch (error) {
+      // 4. Jika terjadi error, kembalikan UI ke kondisi semula
       console.error("Failed to toggle task:", error);
+      // Kembalikan data asli sebelum pembaruan optimis
+      await mutate(completions, { revalidate: false });
     }
   };
 
-  // === PERUBAHAN DI SINI ===
-  // Sekarang, blokir halaman HANYA jika BUKAN hari piket DAN user BUKAN superadmin.
   if (!bolehPiket && session?.role !== "superadmin") {
     return (
       <main className="mx-auto grid min-h-[60svh] w-full max-w-3xl place-items-center p-4">
@@ -103,6 +174,10 @@ export default function JadwalPage() {
         </p>
       </main>
     );
+  }
+
+  if (pageIsLoading) {
+    return <JadwalPageSkeleton />;
   }
 
   return (
@@ -124,23 +199,20 @@ export default function JadwalPage() {
               return (
                 <li
                   key={task.id}
-                  className="flex items-start justify-between gap-4 rounded-md border p-3"
+                  className="flex cursor-pointer items-start justify-between gap-4 rounded-md border p-3 transition-colors hover:bg-muted/50"
+                  onClick={() => toggleTask(task.id, !checked)}
                 >
-                  <div className="flex items-start gap-3">
+                  <div className="flex flex-1 items-start gap-3">
                     <Checkbox
                       id={task.id.toString()}
                       checked={checked}
-                      onCheckedChange={(v) => toggleTask(task.id, Boolean(v))}
+                      readOnly
                       aria-label={`Checklist ${task.name}`}
+                      className="mt-1"
                     />
-                    <div>
-                      <label
-                        htmlFor={task.id.toString()}
-                        className="cursor-pointer font-medium"
-                      >
-                        {task.name}
-                      </label>
-                      <p className="text-muted-foreground text-xs">
+                    <div className="grid flex-1 gap-0.5">
+                      <span className="font-medium">{task.name}</span>
+                      <p className="text-xs text-muted-foreground">
                         Selesai oleh: {checked ? task.completedByName : "-"}
                       </p>
                     </div>

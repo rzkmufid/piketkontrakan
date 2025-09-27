@@ -1,17 +1,10 @@
-"use client"
+"use client";
 
-import { useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { useSession } from "@/components/session-context"
+import { LoadingSpinner } from "@/components/loading-spinner";
 
-export default function RootRedirectPage() {
-  const router = useRouter()
-  const { session } = useSession()
-
-  useEffect(() => {
-    if (session) router.replace("/home")
-    else router.replace("/login")
-  }, [router, session])
-
-  return null
+export default function RootPage() {
+  // Komponen ini tidak perlu melakukan apa-apa.
+  // SessionProvider akan secara otomatis mengarahkan pengguna
+  // ke /login atau /home berdasarkan status sesi.
+  return <LoadingSpinner />;
 }

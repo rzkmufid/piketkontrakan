@@ -1,27 +1,20 @@
-// File layout/app/page.tsx atau di mana AppLayout Anda berada
 "use client";
 
 import type React from "react";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useSession } from "@/components/session-context";
 import { AppSidebarLayout } from "@/components/app-sidebar";
-import { LoadingSpinner } from "@/components/loading-spinner"; // Note: Import komponen baru
+import { LoadingSpinner } from "@/components/loading-spinner";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { session } = useSession();
-  const router = useRouter();
+  const { session, isLoading } = useSession();
 
-  useEffect(() => {
-    if (!session) {
-      router.replace("/login");
-    }
-  }, [router, session]);
+  // Logika redirect sudah dipindahkan ke SessionProvider
 
-  // Note: Ganti null dengan LoadingSpinner untuk UX yang lebih baik
-  if (!session) {
+  if (isLoading || !session) {
+    // Tampilkan spinner selama loading atau sebelum redirect dari provider berjalan
     return <LoadingSpinner />;
   }
 
+  // Jika sudah tidak loading dan sesi ada, tampilkan layout
   return <AppSidebarLayout>{children}</AppSidebarLayout>;
 }

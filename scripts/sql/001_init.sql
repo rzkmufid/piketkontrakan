@@ -1,3 +1,5 @@
+-- file: scripts/sql/001_init.sql
+
 -- users: keep password in plain text for demo simplicity (replace with hashing in production)
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -6,6 +8,12 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL DEFAULT 'user',
   group_name TEXT NOT NULL DEFAULT 'Grup 1'
 );
+
+-- TAMBAHKAN BLOK KODE INI
+CREATE TABLE IF NOT EXISTS groups (
+  name TEXT PRIMARY KEY NOT NULL
+);
+-- -------------------------
 
 CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

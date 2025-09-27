@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { DateRange } from "react-day-picker";
-import { addDays, format, startOfMonth, startOfWeek } from "date-fns";
+import { format, startOfWeek } from "date-fns";
 import useSWR from "swr";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -17,7 +17,6 @@ import { DatePickerWithPresets } from "@/components/ui/date-picker";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// Definisikan tipe data yang akan kita terima dari API
 type RecapData = {
   date: string;
   taskName: string;
@@ -26,18 +25,53 @@ type RecapData = {
   group: string;
 };
 
-// Fungsi untuk fetch data
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+// --- Komponen Skeleton untuk Desktop ---
+const RecapTableSkeleton = () => (
+  <TableBody>
+    {Array.from({ length: 5 }).map((_, i) => (
+      <TableRow key={`desktop-skeleton-${i}`}>
+        <TableCell>
+          <Skeleton className="h-5 w-24" />
+        </TableCell>
+        <TableCell>
+          <Skeleton className="h-5 w-full" />
+        </TableCell>
+        <TableCell>
+          <Skeleton className="h-5 w-20" />
+        </TableCell>
+        <TableCell>
+          <Skeleton className="h-5 w-16" />
+        </TableCell>
+        <TableCell>
+          <Skeleton className="h-5 w-32" />
+        </TableCell>
+      </TableRow>
+    ))}
+  </TableBody>
+);
+
+// --- Komponen Skeleton untuk Mobile ---
+const RecapCardSkeleton = () => (
+  <div className="space-y-4">
+    {Array.from({ length: 3 }).map((_, i) => (
+      <Card key={`mobile-skeleton-${i}`}>
+        <CardContent className="p-4">
+          <Skeleton className="h-24 w-full" />
+        </CardContent>
+      </Card>
+    ))}
+  </div>
+);
 
 export default function RecapPage() {
   const today = new Date();
-  // State untuk menyimpan rentang tanggal yang dipilih
   const [date, setDate] = useState<DateRange | undefined>({
-    from: startOfWeek(today), // Default: Awal minggu ini
-    to: today, // Default: Hari ini
+    from: startOfWeek(today, { weekStartsOn: 1 }),
+    to: today,
   });
 
-  // Membuat URL API dengan parameter tanggal
   const apiUrl =
     date?.from && date?.to
       ? `/api/recap?startDate=${format(
@@ -46,13 +80,17 @@ export default function RecapPage() {
         )}&endDate=${format(date.to, "yyyy-MM-dd")}`
       : null;
 
-  // Menggunakan SWR untuk fetching data
-  const { data, error, isLoading } = useSWR<{ recap: RecapData[] }>(
+  // === PERUBAHAN DI SINI: Ambil 'isValidating' dari SWR ===
+  const { data, error, isValidating } = useSWR<{ recap: RecapData[] }>(
     apiUrl,
     fetcher
   );
 
-  console.log(data, "data");
+  if (error) {
+    return (
+      <div className="text-center text-red-500">Gagal memuat data rekap.</div>
+    );
+  }
 
   return (
     <main className="mx-auto w-full max-w-5xl space-y-6">
@@ -73,7 +111,8 @@ export default function RecapPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
+          {/* === TAMPILAN DESKTOP (TABLE) === */}
+          <div className="hidden rounded-md border md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -84,43 +123,72 @@ export default function RecapPage() {
                   <TableHead>Diselesaikan Oleh</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
-                {isLoading &&
-                  // Tampilan loading skeleton
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell>
-                        <Skeleton className="h-5 w-24" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-5 w-48" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-5 w-20" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-5 w-16" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-5 w-32" />
+              {/* === PERUBAHAN DI SINI: Gunakan 'isValidating' === */}
+              {isValidating ? (
+                <RecapTableSkeleton />
+              ) : (
+                <TableBody>
+                  {!data?.recap || data.recap.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-24 text-center">
+                        Tidak ada data untuk rentang tanggal yang dipilih.
                       </TableCell>
                     </TableRow>
-                  ))}
-                {!isLoading && (!data?.recap || data.recap.length === 0) && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
-                      Tidak ada data untuk rentang tanggal yang dipilih.
-                    </TableCell>
-                  </TableRow>
-                )}
-                {data?.recap.map((item, index) => (
-                  <TableRow key={index}>
-                    <TableCell>
-                      {format(new Date(item.date), "dd MMM yyyy")}
-                    </TableCell>
-                    <TableCell>{item.taskName}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
+                  ) : (
+                    data.recap.map((item, index) => (
+                      <TableRow key={`desktop-${index}`}>
+                        <TableCell>
+                          {format(new Date(item.date), "dd MMM yyyy")}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {item.taskName}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {item.status === "Completed" ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <AlertCircle className="h-4 w-4 text-red-500" />
+                            )}
+                            <span>
+                              {item.status === "Completed"
+                                ? "Selesai"
+                                : "Terlewat"}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{item.group}</TableCell>
+                        <TableCell>{item.completedBy ?? "-"}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              )}
+            </Table>
+          </div>
+
+          {/* === TAMPILAN MOBILE (CARD LIST) === */}
+          <div className="space-y-4 md:hidden">
+            {/* === PERUBAHAN DI SINI: Gunakan 'isValidating' === */}
+            {isValidating ? (
+              <RecapCardSkeleton />
+            ) : !data?.recap || data.recap.length === 0 ? (
+              <div className="py-12 text-center text-muted-foreground">
+                <p>Tidak ada data untuk rentang tanggal yang dipilih.</p>
+              </div>
+            ) : (
+              data.recap.map((item, index) => (
+                <Card key={`mobile-${index}`}>
+                  <CardHeader>
+                    <CardTitle className="text-base">{item.taskName}</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      {format(new Date(item.date), "eeee, dd MMM yyyy")}
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Status:</span>
+                      <div className="flex items-center gap-2 font-medium">
                         {item.status === "Completed" ? (
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
                         ) : (
@@ -130,13 +198,19 @@ export default function RecapPage() {
                           {item.status === "Completed" ? "Selesai" : "Terlewat"}
                         </span>
                       </div>
-                    </TableCell>
-                    <TableCell>{item.group}</TableCell>
-                    <TableCell>{item.completedBy ?? "-"}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Grup:</span>
+                      <span>{item.group}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Oleh:</span>
+                      <span>{item.completedBy ?? "-"}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>

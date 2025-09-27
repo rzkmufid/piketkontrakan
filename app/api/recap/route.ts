@@ -1,16 +1,19 @@
+// app/api/recap/route.ts
+
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { eachDayOfInterval, format, getDay } from "date-fns";
+import { id as localeID } from "date-fns/locale"; // Untuk penyesuaian zona waktu
 
 // Mapping hari (0=Minggu, 1=Senin, dst) ke grup
 const scheduleMap: { [key: number]: string[] } = {
-  0: ["Grup 1", "Grup 2", "Grup 3"], // Minggu (Piket Bersama)
-  1: ["Grup 1"], // Senin
-  2: ["Grup 2"], // Selasa
-  3: ["Grup 3"], // Rabu
-  4: ["Grup 1"], // Kamis
-  5: ["Grup 2"], // Jumat
-  6: ["Grup 3"], // Sabtu
+  0: ["Piket Bersama"], // Minggu kini menggunakan grup khusus
+  1: ["Grup 1"],
+  2: ["Grup 2"],
+  3: ["Grup 3"],
+  4: ["Grup 1"],
+  5: ["Grup 2"],
+  6: ["Grup 3"],
 };
 
 export async function GET(request: Request) {
@@ -31,22 +34,20 @@ export async function GET(request: Request) {
     const [tasksRes, completionsRes] = await Promise.all([
       db.execute("SELECT id, name FROM tasks"),
       db.execute({
-        // === PERUBAHAN DI SINI ===
-        // Mengubah u.name menjadi u.username
         sql: "SELECT t.name as taskName, c.date, u.username as userName, u.group_name as groupName FROM task_completions c JOIN tasks t ON c.task_id = t.id JOIN users u ON c.user_id = u.id WHERE c.date BETWEEN ? AND ?",
         args: [startDate, endDate],
       }),
     ]);
-    // ==========================
 
     const allTasks = tasksRes.rows as { id: number; name: string }[];
     const completions = completionsRes.rows as {
       taskName: string;
       date: string;
-      userName: string; // <-- Alias 'userName' tetap sama
+      userName: string;
       groupName: string;
     }[];
 
+    // Buat daftar semua tugas yang seharusnya dikerjakan
     const requiredTasks = new Map<
       string,
       { taskName: string; group: string }[]
@@ -66,26 +67,22 @@ export async function GET(request: Request) {
           requiredTasks.set(dateString, []);
         }
         for (const task of allTasks) {
-          if (dayOfWeek === 0) {
+          for (const group of groupsOnDuty) {
             requiredTasks
               .get(dateString)
-              ?.push({ taskName: task.name, group: "Piket Bersama" });
-          } else {
-            for (const group of groupsOnDuty) {
-              requiredTasks
-                .get(dateString)
-                ?.push({ taskName: task.name, group: group });
-            }
+              ?.push({ taskName: task.name, group: group });
           }
         }
       }
     }
 
+    // Gabungkan data 'required' dan 'completions' untuk rekap final
     const recapMap = new Map<
       string,
       { status: "Completed" | "Missed"; completedBy?: string; group: string }
     >();
 
+    // Tandai semua sebagai "Missed" terlebih dahulu
     requiredTasks.forEach((tasks, date) => {
       tasks.forEach((task) => {
         const key = `${date}|${task.taskName}`;
@@ -93,13 +90,22 @@ export async function GET(request: Request) {
       });
     });
 
+    // Timpa dengan data "Completed"
     completions.forEach((comp) => {
+      // Perlu parsing tanggal dengan hati-hati untuk mendapatkan hari yang benar
+      const completionDate = new Date(comp.date.replace(/-/g, "/"));
+      const dayOfWeek = getDay(completionDate);
       const key = `${comp.date}|${comp.taskName}`;
-      if (recapMap.has(key)) {
+
+      // Ambil tugas yang ada dari map, jangan timpa jika sudah ada yang menyelesaikan
+      const existingTask = recapMap.get(key);
+      if (existingTask && existingTask.status !== "Completed") {
         recapMap.set(key, {
           status: "Completed",
           completedBy: comp.userName,
-          group: comp.groupName,
+          // === PERUBAHAN LOGIKA UTAMA ADA DI SINI ===
+          // Jika hari Minggu, tampilkan "Piket Bersama", jika tidak, tampilkan grup asli user
+          group: dayOfWeek === 0 ? "Piket Bersama" : comp.groupName,
         });
       }
     });
@@ -115,7 +121,11 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("Failed to fetch recap:", error);
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      {
+        error: "Internal Server Error",
+        details:
+          error instanceof Error ? error.message : "An unknown error occurred",
+      },
       { status: 500 }
     );
   }
