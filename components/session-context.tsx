@@ -12,7 +12,7 @@ import { useRouter, usePathname } from "next/navigation";
 type Session = {
   id: number;
   name: string;
-  group: string;
+  group?: string;
   role: "user" | "superadmin";
 };
 

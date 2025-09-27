@@ -206,7 +206,7 @@ export default function JadwalPage() {
                     <Checkbox
                       id={task.id.toString()}
                       checked={checked}
-                      readOnly
+                      disabled
                       aria-label={`Checklist ${task.name}`}
                       className="mt-1"
                     />

@@ -1,34 +1,53 @@
-// <CHANGE> new: login endpoint using libsql
-import { NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
+// app/api/auth/login/route.ts
 
-export async function POST(req: Request) {
+import { NextResponse } from "next/server";
+import { getDb } from "@/lib/db";
+
+export async function POST(request: Request) {
   try {
-    const { username, password } = await req.json()
+    const db = getDb();
+    const { username, password } = await request.json();
+
     if (!username || !password) {
-      return NextResponse.json({ error: "Username and password required" }, { status: 400 })
+      return NextResponse.json(
+        { error: "Username dan password harus diisi." },
+        { status: 400 }
+      );
     }
 
-    const db = getDb()
-    const res = await db.execute({
-      sql: "SELECT id, username, password, role, group_name FROM users WHERE username = ? LIMIT 1",
+    // Ambil data user, TERMASUK group_name
+    const userResult = await db.execute({
+      sql: "SELECT id, username, role, group_name FROM users WHERE username = ? LIMIT 1",
       args: [username],
-    })
+    });
 
-    const row = res.rows[0] as any
-    if (!row || row.password !== password) {
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
+    if (userResult.rows.length === 0) {
+      return NextResponse.json(
+        { error: "Username tidak ditemukan." },
+        { status: 404 }
+      );
     }
 
-    const user = {
-      id: Number(row.id),
-      username: String(row.username),
-      role: (row.role as string) || "user",
-      group: (row.group_name as string) || "Grup 1",
+    // Verifikasi password (saat ini masih plaintext, sesuai skema Anda)
+    // Di aplikasi production, di sini Anda akan membandingkan hash password.
+    const userPasswordInDb = await db.execute({
+      sql: "SELECT password FROM users WHERE username = ?",
+      args: [username],
+    });
+
+    if (userPasswordInDb.rows[0].password !== password) {
+      return NextResponse.json({ error: "Password salah." }, { status: 401 });
     }
 
-    return NextResponse.json({ user })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Login failed" }, { status: 500 })
+    // Jika password benar, kirim data user sebagai respons
+    const user = userResult.rows[0];
+
+    return NextResponse.json({ user });
+  } catch (error) {
+    console.error("Login failed:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
