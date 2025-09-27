@@ -4,10 +4,10 @@ let client: Client | null = null;
 
 export function getDb() {
   if (!client) {
-    const raw = process.env.TORSO_DATABASE_URL;
+    const raw = process.env.TURSO_DATABASE_URL;
     if (!raw) {
       throw new Error(
-        "Missing TORSO_DATABASE_URL for libsql/Turso. Set it in Project Settings → Environment Variables."
+        "Missing TURSO_DATABASE_URL for libsql/Turso. Set it in Project Settings → Environment Variables."
       );
     }
 
@@ -19,13 +19,13 @@ export function getDb() {
     }
     if (!raw.startsWith("libsql://") && !raw.startsWith("https://")) {
       throw new Error(
-        "TORSO_DATABASE_URL must be a Turso/libSQL URL starting with libsql:// or https:// (not a postgres:// URL)."
+        "TURSO_DATABASE_URL must be a Turso/libSQL URL starting with libsql:// or https:// (not a postgres:// URL)."
       );
     }
 
     client = createClient({
       url: raw,
-      authToken: process.env.TORSO_AUTH_TOKEN, // required on Turso
+      authToken: process.env.TURSO_AUTH_TOKEN, // required on Turso
     });
   }
   return client;

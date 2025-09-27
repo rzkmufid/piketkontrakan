@@ -1,5 +1,5 @@
 // Run order: 001_init.sql -> 002_seed.sql
-// Uses process.env.TORSO_DATABASE_URL and TORSO_AUTH_TOKEN
+// Uses process.env.TURSO_DATABASE_URL and TURSO_AUTH_TOKEN
 
 import { createClient } from "@libsql/client";
 import fs from "node:fs";
@@ -36,22 +36,22 @@ async function runSqlFile(
 }
 
 async function main() {
-  const url = process.env.TORSO_DATABASE_URL;
-  const token = process.env.TORSO_AUTH_TOKEN;
+  const url = process.env.TURSO_DATABASE_URL;
+  const token = process.env.TURSO_AUTH_TOKEN;
 
   if (!url) {
     throw new Error(
-      "TORSO_DATABASE_URL is required. Set it in Project Settings → Environment Variables (Turso URL)."
+      "TURSO_DATABASE_URL is required. Set it in Project Settings → Environment Variables (Turso URL)."
     );
   }
   if (url.includes("sslmode")) {
     throw new Error(
-      'Remove "sslmode" from TORSO_DATABASE_URL. Turso/libSQL does not support that param.'
+      'Remove "sslmode" from TURSO_DATABASE_URL. Turso/libSQL does not support that param.'
     );
   }
   if (!url.startsWith("libsql://") && !url.startsWith("https://")) {
     throw new Error(
-      "TORSO_DATABASE_URL must start with libsql:// or https:// (Turso/libSQL)."
+      "TURSO_DATABASE_URL must start with libsql:// or https:// (Turso/libSQL)."
     );
   }
 
