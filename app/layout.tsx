@@ -9,9 +9,9 @@ import { Suspense } from "react";
 import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
-  title: "v0 App",
-  description: "Created with v0",
-  generator: "v0.app",
+  title: "Kontrakan Hitam",
+  description: "Checklist Piket Harian Kontrakan",
+  generator: "vscode",
 };
 
 export default function RootLayout({
