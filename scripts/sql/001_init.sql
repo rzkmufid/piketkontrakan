@@ -1,19 +1,26 @@
--- file: scripts/sql/001_init.sql
+-- Hapus semua tabel yang ada terlebih dahulu untuk memastikan keadaan bersih.
+-- Urutan penghapusan penting jika ada foreign key.
+DROP TABLE IF EXISTS task_completions;
+DROP TABLE IF EXISTS tasks;
+DROP TABLE IF EXISTS groups;
+DROP TABLE IF EXISTS users;
 
--- users: keep password in plain text for demo simplicity (replace with hashing in production)
+-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+-- Buat ulang semua tabel dengan skema yang benar.
+
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT, 
   username TEXT NOT NULL UNIQUE,
   password TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'user',
-  group_name TEXT NOT NULL DEFAULT 'Grup 1'
+  group_name TEXT NOT NULL
 );
 
--- TAMBAHKAN BLOK KODE INI
 CREATE TABLE IF NOT EXISTS groups (
   name TEXT PRIMARY KEY NOT NULL
 );
--- -------------------------
 
 CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
