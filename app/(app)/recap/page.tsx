@@ -1,10 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DateRange } from "react-day-picker";
 import { format, startOfWeek } from "date-fns";
 import useSWR from "swr";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -13,8 +19,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 import { DatePickerWithPresets } from "@/components/ui/date-picker";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type RecapData = {
@@ -24,14 +36,20 @@ type RecapData = {
   completedBy?: string;
   group: string;
 };
+type PaginationData = {
+  page: number;
+  limit: number;
+  totalItems: number;
+  totalPages: number;
+};
+type ApiResponse = { recap: RecapData[]; pagination: PaginationData };
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-// --- Komponen Skeleton untuk Desktop ---
 const RecapTableSkeleton = () => (
   <TableBody>
     {Array.from({ length: 5 }).map((_, i) => (
-      <TableRow key={`desktop-skeleton-${i}`}>
+      <TableRow key={`d-skel-${i}`}>
         <TableCell>
           <Skeleton className="h-5 w-24" />
         </TableCell>
@@ -51,12 +69,10 @@ const RecapTableSkeleton = () => (
     ))}
   </TableBody>
 );
-
-// --- Komponen Skeleton untuk Mobile ---
 const RecapCardSkeleton = () => (
   <div className="space-y-4">
     {Array.from({ length: 3 }).map((_, i) => (
-      <Card key={`mobile-skeleton-${i}`}>
+      <Card key={`m-skel-${i}`}>
         <CardContent className="p-4">
           <Skeleton className="h-24 w-full" />
         </CardContent>
@@ -71,26 +87,34 @@ export default function RecapPage() {
     from: startOfWeek(today, { weekStartsOn: 1 }),
     to: today,
   });
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
+  // Reset ke halaman 1 setiap kali filter tanggal berubah
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [date]);
 
   const apiUrl =
     date?.from && date?.to
       ? `/api/recap?startDate=${format(
           date.from,
           "yyyy-MM-dd"
-        )}&endDate=${format(date.to, "yyyy-MM-dd")}`
+        )}&endDate=${format(
+          date.to,
+          "yyyy-MM-dd"
+        )}&page=${currentPage}&limit=${ITEMS_PER_PAGE}`
       : null;
 
-  // === PERUBAHAN DI SINI: Ambil 'isValidating' dari SWR ===
-  const { data, error, isValidating } = useSWR<{ recap: RecapData[] }>(
-    apiUrl,
-    fetcher
-  );
+  const { data, error, isValidating } = useSWR<ApiResponse>(apiUrl, fetcher);
 
-  if (error) {
+  const recapData = data?.recap || [];
+  const pagination = data?.pagination;
+
+  if (error)
     return (
       <div className="text-center text-red-500">Gagal memuat data rekap.</div>
     );
-  }
 
   return (
     <main className="mx-auto w-full max-w-5xl space-y-6">
@@ -111,7 +135,7 @@ export default function RecapPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {/* === TAMPILAN DESKTOP (TABLE) === */}
+          {/* Tampilan Desktop */}
           <div className="hidden rounded-md border md:block">
             <Table>
               <TableHeader>
@@ -123,19 +147,18 @@ export default function RecapPage() {
                   <TableHead>Diselesaikan Oleh</TableHead>
                 </TableRow>
               </TableHeader>
-              {/* === PERUBAHAN DI SINI: Gunakan 'isValidating' === */}
               {isValidating ? (
                 <RecapTableSkeleton />
               ) : (
                 <TableBody>
-                  {!data?.recap || data.recap.length === 0 ? (
+                  {recapData.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} className="h-24 text-center">
-                        Tidak ada data untuk rentang tanggal yang dipilih.
+                        Tidak ada data.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    data.recap.map((item, index) => (
+                    recapData.map((item, index) => (
                       <TableRow key={`desktop-${index}`}>
                         <TableCell>
                           {format(new Date(item.date), "dd MMM yyyy")}
@@ -167,17 +190,16 @@ export default function RecapPage() {
             </Table>
           </div>
 
-          {/* === TAMPILAN MOBILE (CARD LIST) === */}
+          {/* Tampilan Mobile */}
           <div className="space-y-4 md:hidden">
-            {/* === PERUBAHAN DI SINI: Gunakan 'isValidating' === */}
             {isValidating ? (
               <RecapCardSkeleton />
-            ) : !data?.recap || data.recap.length === 0 ? (
+            ) : recapData.length === 0 ? (
               <div className="py-12 text-center text-muted-foreground">
-                <p>Tidak ada data untuk rentang tanggal yang dipilih.</p>
+                <p>Tidak ada data.</p>
               </div>
             ) : (
-              data.recap.map((item, index) => (
+              recapData.map((item, index) => (
                 <Card key={`mobile-${index}`}>
                   <CardHeader>
                     <CardTitle className="text-base">{item.taskName}</CardTitle>
@@ -213,6 +235,33 @@ export default function RecapPage() {
             )}
           </div>
         </CardContent>
+
+        {/* Komponen Paginasi */}
+        {!isValidating && pagination && pagination.totalPages > 1 && (
+          <CardFooter className="flex items-center justify-between border-t px-6 py-4">
+            <div className="text-xs text-muted-foreground">
+              Halaman {pagination.page} dari {pagination.totalPages}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => p - 1)}
+                disabled={pagination.page <= 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" /> Sebelumnya
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => p + 1)}
+                disabled={pagination.page >= pagination.totalPages}
+              >
+                Berikutnya <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </CardFooter>
+        )}
       </Card>
     </main>
   );
