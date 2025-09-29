@@ -34,17 +34,44 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    // Memeriksa sesi dari localStorage saat pertama kali dimuat
-    try {
-      const raw = localStorage.getItem("piket_session");
-      if (raw) {
-        setSession(JSON.parse(raw));
+    const initSession = async () => {
+      try {
+        const raw = localStorage.getItem("piket_session");
+        if (raw) {
+          const stored: Session = JSON.parse(raw);
+
+          // Cek ke server apakah session masih valid
+          const res = await fetch("/api/auth/me", {
+            headers: { "Content-Type": "application/json" },
+          });
+
+          if (res.ok) {
+            const { user } = await res.json();
+            // Update session dengan data terbaru dari server
+            const freshSession: Session = {
+              id: user.id,
+              name: user.username,
+              group: user.group_name,
+              role: user.role,
+            };
+            setSession(freshSession);
+            localStorage.setItem("piket_session", JSON.stringify(freshSession));
+          } else {
+            // Jika invalid → hapus session lama
+            localStorage.removeItem("piket_session");
+            setSession(null);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to restore session", err);
+        localStorage.removeItem("piket_session");
+        setSession(null);
+      } finally {
+        setIsLoading(false);
       }
-    } catch {
-      // ignore
-    } finally {
-      setIsLoading(false);
-    }
+    };
+
+    initSession();
   }, []);
 
   useEffect(() => {
